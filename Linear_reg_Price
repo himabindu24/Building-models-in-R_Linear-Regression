@@ -1,0 +1,175 @@
+library(dplyr)
+library(tidyr)
+getwd()
+setwd("C://Users//Admin//Documents//R lang//R_Projects//Datasets")
+
+house_train=read.csv("housing_train.csv",stringsAsFactors = F)
+house_test= read.csv("housing_test.csv",stringsAsFactors = F)
+
+house_test$Price=NA
+
+house_train$data='train'
+house_test$data='test'
+
+house_all=rbind(house_train,house_test)
+
+house_all$Address=NULL
+
+glimpse(house_all)
+lapply(house_all,function(x) length(unique(x)))
+lapply(house_all,function(x) sum(is.na(x)))
+names(house_all)[sapply(house_all,function(x) is.character(x))]
+
+house_all=house_all%>%mutate(Price=ifelse(is.na(Price),mean(Price,na.rm = T),Price),
+                             Landsize=ifelse(is.na(Landsize),round(mean(Landsize,na.rm = T)),Landsize),
+                             Bedroom2=ifelse(is.na(Bedroom2),round(mean(Bedroom2,na.rm = T)),Bedroom2),
+                             Bathroom=ifelse(is.na(Bathroom),round(mean(Bathroom,na.rm = T)),Bathroom),
+                             Car=ifelse(is.na(Car),round(mean(Car,na.rm = T)),Car),
+                             BuildingArea=ifelse(is.na(BuildingArea),round(mean(BuildingArea,na.rm = T)),BuildingArea),
+                             YearBuilt=ifelse(is.na(YearBuilt),round(mean(YearBuilt,na.rm = T)),YearBuilt),
+                             Rooms=as.character(Rooms))%>%
+                      select(-CouncilArea,-Postcode)
+                             
+glimpse(house_all)
+
+CreateDummies=function(data,var,freq_cutoff=0){
+  t=table(data[,var])
+  t=t[t>freq_cutoff]
+  t=sort(t)
+  categories=names(t)[-1]
+  
+  for( cat in categories){
+    name=paste(var,cat,sep="_")
+    name=gsub(" ","",name)
+    name=gsub("-","_",name)
+    name=gsub("\\?","Q",name)
+    name=gsub("<","LT_",name)
+    name=gsub("\\+","",name)
+    
+    data[,name]=as.numeric(data[,var]==cat)
+  }
+  
+  data[,var]=NULL
+  return(data)
+}
+
+glimpse(house_all)
+names(house_all)[sapply(house_all,function(x) is.character(x))]
+sort(table(house_all$Suburb),decreasing = T)
+sort(table(house_all$Rooms),decreasing = T)
+sort(table(house_all$Method),decreasing = T)
+sort(table(house_all$SellerG),decreasing = T)
+sort(table(house_all$Postcode),decreasing = T)
+sort(table(house_all$Bedroom2),decreasing = T)
+sort(table(house_all$Bathroom),decreasing = T)
+sort(table(house_all$Car),decreasing = T)
+sort(table(house_all$CouncilArea),decreasing = T)
+
+house_all=CreateDummies(house_all ,"Suburb",100)
+house_all=CreateDummies(house_all,"Rooms",100)
+house_all=CreateDummies(house_all ,"Type",100)
+house_all=CreateDummies(house_all,"Method",50)
+house_all=CreateDummies(house_all ,"SellerG",100)
+#house_all=CreateDummies(house_all,"Postcode",150)
+# house_all=CreateDummies(house_all,"Bedroom2",200)
+# house_all=CreateDummies(house_all ,"Bathroom",200)
+# house_all=CreateDummies(house_all,"Car",200)
+#house_all=CreateDummies(house_all,"CouncilArea",400)
+
+house_train=house_all %>% filter(data=='train') %>% select(-data)
+house_test=house_all %>% filter(data=='test') %>% select(-data,-Price)
+
+set.seed(2)
+s=sample(1:nrow(house_train),0.7*nrow(house_train))
+house_train1=house_train[s,]
+house_train2=house_train[-s,]
+
+library(car)
+
+for_vif=lm(Price~. -Rooms_2,data=house_train1)
+sort(vif(for_vif),decreasing = T)[1:3]
+
+summary(for_vif)
+
+#install.packages("curl")
+# we'll take vif cutoff as 5
+
+sort(vif(fit),decreasing = T)
+
+fit=lm(Price~. -Rooms_2,data=house_train1)
+
+# p-value take the cutoff .05
+
+summary(fit)
+
+fit=step(fit)
+formula(fit)
+
+## AIC score 
+
+fit=lm(Price ~ Distance + Bedroom2 + Bathroom + Car + Landsize + BuildingArea + 
+         YearBuilt + Suburb_Doncaster + Suburb_AscotVale + Suburb_Footscray + 
+          Suburb_Hampton + Suburb_Yarraville + Suburb_Balwyn + 
+         Suburb_MalvernEast + Suburb_Camberwell + Suburb_Carnegie + 
+         Suburb_Bentleigh + Suburb_PascoeVale + Suburb_BrightonEast + 
+         Suburb_BalwynNorth + Suburb_Coburg + Suburb_Northcote + Suburb_Kew + 
+         Suburb_Brighton + Suburb_Glenroy + Suburb_GlenIris + Suburb_Essendon + 
+         Suburb_Brunswick + Suburb_Preston + Suburb_Richmond + Suburb_BentleighEast + 
+         Suburb_Reservoir + Rooms_1 + Rooms_4 + Rooms_3 + Type_u + 
+         Type_h + Method_SP + Method_PI + Method_S + SellerG_Kay + 
+          SellerG_McGrath + SellerG_Noel + SellerG_Gary + 
+         SellerG_Jas + SellerG_Miles + SellerG_Greg + SellerG_Sweeney + 
+         SellerG_RT + SellerG_Fletchers +  SellerG_Brad + 
+         SellerG_Buxton + SellerG_Marshall + SellerG_Barry + 
+         SellerG_Jellis + SellerG_Nelson,
+       data=house_train1)
+
+summary(fit)
+
+###
+
+val.pred=predict(fit,newdata=house_train2)
+
+errors=house_train2$Price-val.pred
+
+errors**2 %>% mean() %>% sqrt()
+
+#212467/443227.3= 0.4793635
+# 212467/469569.2= 0.4524722
+# 212467/416290.3=0.5103818
+### model for predcition on the entire data
+
+for_vif=lm(Price~. -Rooms_2,data=house_train)
+sort(vif(for_vif),decreasing = T)[1:3]
+
+
+fit.final=lm(Price ~ . -Rooms_2,data=house_train)
+
+fit.final=step(fit.final)
+formula(fit.final)
+
+
+fit.final=lm(Price ~ Distance + Bedroom2 + Bathroom + Car + Landsize + BuildingArea + 
+               YearBuilt + Suburb_Doncaster + Suburb_AscotVale + Suburb_Footscray + 
+               Suburb_Thornbury + Suburb_Hampton + Suburb_Yarraville + Suburb_Balwyn + 
+               Suburb_MalvernEast + Suburb_Camberwell + Suburb_Carnegie + 
+               Suburb_Bentleigh + Suburb_PascoeVale + Suburb_BrightonEast + 
+               Suburb_BalwynNorth + Suburb_Coburg + Suburb_Kew + Suburb_Brighton + 
+               Suburb_Glenroy + Suburb_GlenIris + Suburb_Essendon + Suburb_Brunswick + 
+               Suburb_Preston + Suburb_Richmond + Suburb_BentleighEast + 
+               Suburb_Reservoir + Rooms_1 + Rooms_4 + Rooms_3 + Type_u + 
+               Type_h +  Method_S + SellerG_Kay + SellerG_McGrath + 
+               SellerG_Noel + SellerG_Gary + SellerG_Jas + SellerG_Miles + 
+               SellerG_Greg + SellerG_Sweeney + SellerG_RT + SellerG_Fletchers + 
+               SellerG_Woodards + SellerG_Brad + SellerG_Buxton + SellerG_Marshall + 
+               SellerG_Barry + SellerG_hockingstuart + SellerG_Jellis + 
+               SellerG_Nelson,data=house_train)
+summary(fit.final)
+
+test.pred=predict(fit.final,newdata=house_test)
+
+write.csv(test.pred,"Himabindu_Rachamallu_P1_part2.csv",row.names =F)
+# write.table( test.pred ,file="test.pred.csv", append=F, sep=",", row.names=F,
+#              col.names=c("Price"))
+
+
